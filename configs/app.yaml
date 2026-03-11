@@ -1,0 +1,9 @@
+app:
+  name: okx-hft-research
+  env: ${APP_ENV:local}
+  debug: false
+  log_level: INFO
+
+streamlit:
+  port: 8501
+  theme: dark

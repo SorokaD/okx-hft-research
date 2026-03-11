@@ -1,0 +1,8 @@
+database:
+  host: ${PGHOST:localhost}
+  port: ${PGPORT:5432}
+  database: ${PGDATABASE:okx_hft}
+  user: ${PGUSER:okx}
+  schema: okx_core
+  pool_size: 5
+  statement_timeout_ms: 30000

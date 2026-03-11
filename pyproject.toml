@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "okx-hft-research"
+version = "0.1.0"
+description = "Research layer for OKX HFT: microstructure, visualization, features, signals"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "OKX HFT Team" }]
+
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "sqlalchemy>=2.0",
+    "psycopg2-binary>=2.9",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "matplotlib>=3.7",
+    "plotly>=5.18",
+    "streamlit>=1.28",
+    "jupyter>=1.0",
+    "notebook>=7.0",
+    "pytest>=7.4",
+    "fastapi>=0.104",
+    "uvicorn>=0.24",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=23.0",
+    "isort>=5.12",
+    "ruff>=0.1",
+    "mypy>=1.6",
+]
+
+[project.scripts]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["research*", "apps*"]
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v"

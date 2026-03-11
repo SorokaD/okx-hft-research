@@ -1,0 +1,7 @@
+instruments:
+  default:
+    - BTC-USDT-SWAP
+    - ETH-USDT-SWAP
+  all:
+    - BTC-USDT-SWAP
+    - ETH-USDT-SWAP

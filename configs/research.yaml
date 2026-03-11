@@ -1,0 +1,17 @@
+research:
+  features:
+    spread:
+      use_mid: true
+    imbalance:
+      levels: [1, 5, 10]
+    microprice:
+      level: 1
+
+  labels:
+    future_mid_move:
+      horizon_rows: [10, 50, 100]
+      bucket_threshold: 0.0001
+
+  backtest:
+    fee_bps: 2.0
+    slippage_bps: 1.0

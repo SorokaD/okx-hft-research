@@ -1,0 +1,16 @@
+experiment: EXP-001-orderbook-imbalance
+instrument: BTC-USDT-SWAP
+data:
+  table: okx_core.fact_orderbook_l10_snapshot
+  ts_start: null
+  ts_end: null
+features:
+  imbalance:
+    levels: [1]
+labels:
+  future_mid_move:
+    horizon_rows: 10
+    bucket_threshold: 0.0001
+signal:
+  imbalance_signal:
+    threshold: 0.2

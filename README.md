@@ -118,22 +118,24 @@ raw/core data → research → hypothesis → feature → signal → validation 
 ## Как запускать проект
 
 ```bash
-# Клонирование
-git clone <repo-url>
 cd okx-hft-research
 
-# Виртуальное окружение
+# Вариант 1: make setup (создаёт .venv и ставит пакет)
+make setup
+.venv\Scripts\activate   # Windows
+# source .venv/bin/activate   # Linux/macOS
+
+# Вариант 2: вручную
 python -m venv .venv
-source .venv/bin/activate   # Linux/macOS
-# или: .venv\Scripts\activate  # Windows
+.venv\Scripts\activate
+pip install -e .
 
-# Установка
-make install
-
-# Настройка окружения
-cp .env.example .env
-# Отредактируйте .env (PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD)
+# Запуск Jupyter (из корня проекта)
+make notebook
+# или: jupyter notebook notebooks/
 ```
+
+**Важно:** Запускайте Jupyter из корня проекта (`cd okx-hft-research`), чтобы ноутбуки видели `research`. Либо в каждом ноутбуке есть bootstrap-ячейка, добавляющая корень в `sys.path`.
 
 ---
 

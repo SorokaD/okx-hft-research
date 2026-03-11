@@ -3,11 +3,14 @@
 Export orderbook sample from TimescaleDB to CSV/Parquet.
 Usage: python scripts/export_orderbook_sample.py --inst BTC-USDT-SWAP --out data_samples/orderbook_sample.parquet
 """
-
 from __future__ import annotations
 
-import argparse
+import sys
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import argparse
 from research.db.loaders import load_orderbook_snapshot
 
 

@@ -3,11 +3,14 @@
 Run feature build: load data, compute features, save.
 Usage: python scripts/run_feature_build.py --inst BTC-USDT-SWAP --out data_samples/features.parquet
 """
-
 from __future__ import annotations
 
-import argparse
+import sys
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import argparse
 from research.db.loaders import load_orderbook_snapshot
 from research.features import compute_spread, compute_relative_spread, compute_l1_imbalance, compute_microprice
 

@@ -3,11 +3,14 @@
 Run signal evaluation: load data, build signal and label, compute metrics.
 Usage: python scripts/run_signal_eval.py --inst BTC-USDT-SWAP
 """
-
 from __future__ import annotations
 
-import argparse
+import sys
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import argparse
 from research.db.loaders import load_orderbook_snapshot
 from research.labels import build_future_mid_move_label
 from research.signals import build_imbalance_signal

@@ -1,4 +1,10 @@
-.PHONY: install install-dev format lint test streamlit notebook clean
+.PHONY: setup install install-dev format lint test streamlit notebook clean
+
+# One-time setup: venv + install
+setup:
+	python -m venv .venv
+	.venv/Scripts/python -m pip install -e . 2>/dev/null || .venv/bin/python -m pip install -e .
+	@echo "Done. Activate: .venv\\Scripts\\activate (Win) or source .venv/bin/activate (Unix)"
 
 install:
 	pip install -e .

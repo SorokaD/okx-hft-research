@@ -12,6 +12,7 @@ license = { text = "MIT" }
 authors = [{ name = "OKX HFT Team" }]
 
 dependencies = [
+    "python-dotenv>=1.0",
     "pandas>=2.0",
     "numpy>=1.24",
     "sqlalchemy>=2.0",

@@ -1,11 +1,16 @@
 """
 Order book reconstruction from snapshot + updates.
+
+Supports two data sources:
+- core: okx_core tables (fact_orderbook_l10_snapshot, fact_orderbook_update_level)
+- raw: okx_raw tables (orderbook_snapshots, orderbook_updates) with OKX native format
 """
 
 from __future__ import annotations
 
+import json
 import re
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
 from sqlalchemy import text
@@ -60,6 +65,146 @@ def find_anchor_snapshot(
     if df.empty:
         return None
     return df.iloc[0]
+
+
+def find_anchor_snapshot_raw(
+    engine: Engine,
+    schema: str,
+    snapshot_table: str,
+    inst_id: str,
+    chunk_start: pd.Timestamp,
+) -> Optional[pd.Series]:
+    """
+    Load anchor snapshot from raw orderbook_snapshots table.
+
+    Raw format: one row per level (snapshot_id, instid, ts_event_ms, side, price, size, level).
+    side=1 bid, side=2 ask. Returns a wide-format row compatible with OrderBookState.from_snapshot_row.
+    """
+    _validate_identifier(schema, "schema")
+    _validate_identifier(snapshot_table, "table")
+
+    chunk_start_ms = int(chunk_start.timestamp() * 1000)
+
+    sql = text(
+        f"""
+        SELECT snapshot_id, instid, ts_event_ms, ts_ingest_ms, side, price, size, level
+        FROM {schema}.{snapshot_table}
+        WHERE instid = :inst_id
+          AND ts_event_ms < :chunk_start_ms
+          AND ts_event_ms = (
+              SELECT MAX(ts_event_ms) FROM {schema}.{snapshot_table}
+              WHERE instid = :inst_id AND ts_event_ms < :chunk_start_ms2
+          )
+        ORDER BY side, price DESC
+        """
+    )
+    with engine.connect() as conn:
+        df = pd.read_sql(
+            sql,
+            conn,
+            params={
+                "inst_id": inst_id,
+                "chunk_start_ms": chunk_start_ms,
+                "chunk_start_ms2": chunk_start_ms,
+            },
+        )
+
+    if df.empty:
+        return None
+
+    # Take the latest snapshot (rows with max ts_event_ms)
+    anchor_ms = int(df["ts_event_ms"].iloc[0])
+    anchor_rows = df[df["ts_event_ms"] == anchor_ms]
+    # If multiple snapshot_ids at same ts, pick the one with most levels
+    if anchor_rows["snapshot_id"].nunique() > 1:
+        snap_counts = anchor_rows.groupby("snapshot_id").size()
+        snap_id = snap_counts.idxmax()
+        anchor_rows = anchor_rows[anchor_rows["snapshot_id"] == snap_id]
+
+    # Pivot to wide format: bid_px_01..bid_sz_10, ask_px_01..ask_sz_10
+    bids = anchor_rows[anchor_rows["side"] == 1].sort_values("price", ascending=False).head(10)
+    asks = anchor_rows[anchor_rows["side"] == 2].sort_values("price", ascending=True).head(10)
+
+    record: dict[str, Any] = {
+        "inst_id": inst_id,
+        "ts_event": pd.Timestamp(anchor_ms, unit="ms", tz="utc"),
+    }
+    for i, (_, r) in enumerate(bids.iterrows(), start=1):
+        record[f"bid_px_{i:02d}"] = float(r["price"])
+        record[f"bid_sz_{i:02d}"] = float(r["size"])
+    for i in range(len(bids) + 1, 11):
+        record[f"bid_px_{i:02d}"] = None
+        record[f"bid_sz_{i:02d}"] = None
+    for i, (_, r) in enumerate(asks.iterrows(), start=1):
+        record[f"ask_px_{i:02d}"] = float(r["price"])
+        record[f"ask_sz_{i:02d}"] = float(r["size"])
+    for i in range(len(asks) + 1, 11):
+        record[f"ask_px_{i:02d}"] = None
+        record[f"ask_sz_{i:02d}"] = None
+
+    return pd.Series(record)
+
+
+def load_updates_raw(
+    engine: Engine,
+    schema: str,
+    updates_table: str,
+    inst_id: str,
+    start_ts: pd.Timestamp,
+    end_ts: pd.Timestamp,
+) -> pd.DataFrame:
+    """
+    Load orderbook updates from raw orderbook_updates table.
+
+    Raw format: bids_delta and asks_delta are JSONB arrays [[price, size], ...] (OKX format).
+    size=0 means remove level. Returns DataFrame with ts_event, side, price, size.
+    """
+    _validate_identifier(schema, "schema")
+    _validate_identifier(updates_table, "table")
+
+    start_ms = int(start_ts.timestamp() * 1000)
+    end_ms = int(end_ts.timestamp() * 1000)
+
+    sql = text(
+        f"""
+        SELECT instid, ts_event_ms, bids_delta, asks_delta
+        FROM {schema}.{updates_table}
+        WHERE instid = :inst_id
+          AND ts_event_ms >= :start_ms
+          AND ts_event_ms <= :end_ms
+        ORDER BY ts_event_ms
+        """
+    )
+    with engine.connect() as conn:
+        df = pd.read_sql(
+            sql, conn, params={"inst_id": inst_id, "start_ms": start_ms, "end_ms": end_ms}
+        )
+
+    if df.empty:
+        return pd.DataFrame()
+
+    rows: list[dict[str, Any]] = []
+    for _, r in df.iterrows():
+        ts_event = pd.Timestamp(int(r["ts_event_ms"]), unit="ms", tz="utc")
+        for delta_col, side in [("bids_delta", "bid"), ("asks_delta", "ask")]:
+            delta = r.get(delta_col)
+            if delta is None:
+                continue
+            if isinstance(delta, str):
+                delta = json.loads(delta) if delta else []
+            if not isinstance(delta, list):
+                continue
+            for level in delta:
+                if not isinstance(level, (list, tuple)) or len(level) < 2:
+                    continue
+                try:
+                    price = float(level[0])
+                    size = float(level[1])
+                    rows.append({"ts_event": ts_event, "side": side, "price": price, "size": size})
+                except (ValueError, TypeError):
+                    continue
+
+    return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
 def load_updates(

@@ -9,10 +9,13 @@ Supports two data sources:
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any, Optional
 
 import pandas as pd
+
+log = logging.getLogger(__name__)
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
@@ -165,23 +168,78 @@ def load_updates_raw(
     start_ms = int(start_ts.timestamp() * 1000)
     end_ms = int(end_ts.timestamp() * 1000)
 
-    sql = text(
-        f"""
-        SELECT instid, ts_event_ms, bids_delta, asks_delta
-        FROM {schema}.{updates_table}
-        WHERE instid = :inst_id
-          AND ts_event_ms >= :start_ms
-          AND ts_event_ms <= :end_ms
-        ORDER BY ts_event_ms
-        """
-    )
+    params = {"inst_id": inst_id, "start_ms": start_ms, "end_ms": end_ms}
     with engine.connect() as conn:
-        df = pd.read_sql(
-            sql, conn, params={"inst_id": inst_id, "start_ms": start_ms, "end_ms": end_ms}
+        count_sql = text(
+            f"""
+            SELECT COUNT(*) AS cnt,
+                   MIN(ts_event_ms) AS min_ms,
+                   MAX(ts_event_ms) AS max_ms
+            FROM {schema}.{updates_table}
+            WHERE instid = :inst_id
+              AND ts_event_ms >= :start_ms AND ts_event_ms <= :end_ms
+            """
+        )
+        stats = pd.read_sql(count_sql, conn, params=params).iloc[0]
+        cnt = int(stats["cnt"])
+        if cnt == 0:
+            log.warning(
+                "load_updates_raw: 0 rows for inst_id=%s start_ms=%s end_ms=%s (check timezone/range)",
+                inst_id,
+                start_ms,
+                end_ms,
+            )
+            return pd.DataFrame()
+
+        log.info(
+            "load_updates_raw: %d rows for inst_id=%s [%s .. %s]",
+            cnt,
+            inst_id,
+            int(stats["min_ms"]) if not pd.isna(stats["min_ms"]) else None,
+            int(stats["max_ms"]) if not pd.isna(stats["max_ms"]) else None,
         )
 
+        sql = text(
+            f"""
+            SELECT instid, ts_event_ms, bids_delta, asks_delta
+            FROM {schema}.{updates_table}
+            WHERE instid = :inst_id
+              AND ts_event_ms >= :start_ms
+              AND ts_event_ms <= :end_ms
+            ORDER BY ts_event_ms
+            """
+        )
+        df = pd.read_sql(sql, conn, params=params)
+
     if df.empty:
+        log.warning(
+            "load_updates_raw: df.empty after SELECT for inst_id=%s start_ms=%s end_ms=%s (cnt_from_stats=%d)",
+            inst_id,
+            start_ms,
+            end_ms,
+            cnt,
+        )
         return pd.DataFrame()
+
+    def _parse_level(level: Any, side: str) -> Optional[tuple[float, float]]:
+        """Extract (price, size) from one level. Supports:
+        - list/tuple: [price, size] (OKX raw)
+        - dict: {"price": "x", "size": "y"} (collector format)
+        """
+        if isinstance(level, (list, tuple)) and len(level) >= 2:
+            try:
+                return (float(level[0]), float(level[1]))
+            except (ValueError, TypeError):
+                return None
+        if isinstance(level, dict):
+            p, s = level.get("price"), level.get("size")
+            if p is None or s is None:
+                return None
+            try:
+                return (float(p), float(s))
+            except (ValueError, TypeError):
+                return None
+        return None
 
     rows: list[dict[str, Any]] = []
     for _, r in df.iterrows():
@@ -191,20 +249,31 @@ def load_updates_raw(
             if delta is None:
                 continue
             if isinstance(delta, str):
-                delta = json.loads(delta) if delta else []
+                delta = json.loads(delta) if delta and delta.strip() else []
             if not isinstance(delta, list):
                 continue
             for level in delta:
-                if not isinstance(level, (list, tuple)) or len(level) < 2:
+                parsed = _parse_level(level, side)
+                if parsed is None:
                     continue
-                try:
-                    price = float(level[0])
-                    size = float(level[1])
-                    rows.append({"ts_event": ts_event, "side": side, "price": price, "size": size})
-                except (ValueError, TypeError):
-                    continue
+                price, size = parsed
+                rows.append({"ts_event": ts_event, "side": side, "price": price, "size": size})
 
-    return pd.DataFrame(rows) if rows else pd.DataFrame()
+    if not rows:
+        log.warning(
+            "load_updates_raw: %d db rows but 0 parsed deltas for inst_id=%s [%s .. %s]",
+            len(df),
+            inst_id,
+            start_ms,
+            end_ms,
+        )
+        return pd.DataFrame()
+
+    out = pd.DataFrame(rows)
+    out.sort_values("ts_event", inplace=True)
+    out.reset_index(drop=True, inplace=True)
+    log.info("load_updates_raw: normalized %d levels (ts_event %s .. %s)", len(out), out["ts_event"].min(), out["ts_event"].max())
+    return out
 
 
 def load_updates(

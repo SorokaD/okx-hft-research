@@ -62,6 +62,7 @@ from research.reconstruction.reconstructor import (  # noqa: E402
     load_updates_raw,
     reconstruct_event_states,
     reconstruct_grid_states,
+    reconstruct_chunk_snapshot_to_snapshot,
 )
 
 logging.basicConfig(
@@ -110,8 +111,16 @@ def _run_check(engine, args) -> None:
     chunk_end_ms = int(chunk_end.timestamp() * 1000)
     log.info("Check: chunk [%s .. %s] -> ms [%d .. %d]", chunk_start, chunk_end, chunk_start_ms, chunk_end_ms)
     try:
+        snapshot_max_depth = (
+            args.snapshot_max_depth if args.snapshot_max_depth and args.snapshot_max_depth > 0 else None
+        )
         anchor = find_anchor_snapshot_raw(
-            engine, args.schema, "orderbook_snapshots", args.inst_id, chunk_start
+            engine,
+            args.schema,
+            "orderbook_snapshots",
+            args.inst_id,
+            chunk_start,
+            snapshot_max_depth=snapshot_max_depth,
         )
         if anchor is None:
             log.warning("No anchor snapshot found")
@@ -195,6 +204,28 @@ def main() -> int:
         help="Book depth (L10)",
     )
     parser.add_argument(
+        "--anchor-policy",
+        choices=["single", "snapshot_to_snapshot"],
+        default="single",
+        help="Reconstruction anchor strategy: single (legacy) or snapshot_to_snapshot (segment resets).",
+    )
+    parser.add_argument(
+        "--validate-segments",
+        action="store_true",
+        help="Optional: validate reconstructed segment vs next snapshot top levels (slow).",
+    )
+    parser.add_argument(
+        "--segment-diagnostics",
+        action="store_true",
+        help="Optional: log extra diagnostics per segment.",
+    )
+    parser.add_argument(
+        "--snapshot-max-depth",
+        type=int,
+        default=0,
+        help="Max snapshot depth levels to load for initializing book state (0 = load all levels).",
+    )
+    parser.add_argument(
         "--output-dir",
         required=True,
         type=Path,
@@ -231,6 +262,9 @@ def main() -> int:
     start_ts = _parse_ts(args.start)
     end_ts = _parse_ts(args.end)
     engine = get_engine()
+    snapshot_max_depth = (
+        args.snapshot_max_depth if args.snapshot_max_depth and args.snapshot_max_depth > 0 else None
+    )
 
     if args.check:
         _run_check(engine, args)
@@ -247,87 +281,115 @@ def main() -> int:
         log.info("Chunk [%s .. %s]", chunk_start, chunk_end)
         chunk_t0 = time.perf_counter()
 
-        if args.source == "raw":
-            if args.verbose:
-                chunk_ms = int(chunk_start.timestamp() * 1000)
-                log.info("Chunk start ms: %d", chunk_ms)
-            anchor = find_anchor_snapshot_raw(
-                engine,
-                args.schema,
-                "orderbook_snapshots",
-                args.inst_id,
-                chunk_start,
-            )
-            if anchor is None:
-                log.warning(
-                    "No anchor snapshot before %s, skipping chunk", chunk_start
+        if args.anchor_policy == "single":
+            if args.source == "raw":
+                if args.verbose:
+                    chunk_ms = int(chunk_start.timestamp() * 1000)
+                    log.info("Chunk start ms: %d", chunk_ms)
+                anchor = find_anchor_snapshot_raw(
+                    engine,
+                    args.schema,
+                    "orderbook_snapshots",
+                    args.inst_id,
+                    chunk_start,
+                    snapshot_max_depth=snapshot_max_depth,
                 )
+                if anchor is None:
+                    log.warning(
+                        "No anchor snapshot before %s, skipping chunk",
+                        chunk_start,
+                    )
+                    chunks_skipped += 1
+                    continue
+                anchor_ts = anchor["ts_event"]
+                updates_df = load_updates_raw(
+                    engine,
+                    args.schema,
+                    "orderbook_updates",
+                    args.inst_id,
+                    anchor_ts,
+                    chunk_end,
+                )
+            else:
+                anchor = find_anchor_snapshot(
+                    engine,
+                    args.snapshot_schema,
+                    args.snapshot_table,
+                    args.inst_id,
+                    args.time_column,
+                    chunk_start,
+                )
+                if anchor is None:
+                    log.warning(
+                        "No anchor snapshot before %s, skipping chunk",
+                        chunk_start,
+                    )
+                    chunks_skipped += 1
+                    continue
+                anchor_ts = anchor["ts_event"]
+                updates_df = load_updates(
+                    engine,
+                    args.updates_schema,
+                    args.updates_table,
+                    args.inst_id,
+                    args.time_column,
+                    anchor_ts,
+                    chunk_end,
+                    price_column=args.price_column,
+                    size_column=args.size_column,
+                )
+
+            if updates_df.empty:
+                log.warning("No updates in chunk, skipping")
                 chunks_skipped += 1
                 continue
-            anchor_ts = anchor["ts_event"]
-            updates_df = load_updates_raw(
-                engine,
-                args.schema,
-                "orderbook_updates",
-                args.inst_id,
-                anchor_ts,
-                chunk_end,
-            )
-        else:
-            anchor = find_anchor_snapshot(
-                engine,
-                args.snapshot_schema,
-                args.snapshot_table,
-                args.inst_id,
-                args.time_column,
-                chunk_start,
-            )
-            if anchor is None:
-                log.warning(
-                    "No anchor snapshot before %s, skipping chunk", chunk_start
+
+            log.info("Loaded %d update rows", len(updates_df))
+
+            if args.mode == "event":
+                df = reconstruct_event_states(
+                    anchor,
+                    updates_df,
+                    chunk_start,
+                    chunk_end,
+                    depth=args.depth,
+                    price_col="price",
+                    size_col="size",
                 )
-                chunks_skipped += 1
-                continue
-            anchor_ts = anchor["ts_event"]
-            updates_df = load_updates(
-                engine,
-                args.updates_schema,
-                args.updates_table,
-                args.inst_id,
-                args.time_column,
-                anchor_ts,
-                chunk_end,
-                price_column=args.price_column,
-                size_column=args.size_column,
-            )
-
-        if updates_df.empty:
-            log.warning("No updates in chunk, skipping")
-            chunks_skipped += 1
-            continue
-
-        log.info("Loaded %d update rows", len(updates_df))
-
-        if args.mode == "event":
-            df = reconstruct_event_states(
-                anchor,
-                updates_df,
-                chunk_start,
-                chunk_end,
-                depth=args.depth,
-                price_col="price",
-                size_col="size",
-            )
+            else:
+                df = reconstruct_grid_states(
+                    anchor,
+                    updates_df,
+                    chunk_start,
+                    chunk_end,
+                    grid_ms=args.grid_ms,
+                    depth=args.depth,
+                    price_col="price",
+                    size_col="size",
+                )
         else:
-            df = reconstruct_grid_states(
-                anchor,
-                updates_df,
-                chunk_start,
-                chunk_end,
+            df = reconstruct_chunk_snapshot_to_snapshot(
+                engine=engine,
+                source=args.source,
+                schema=args.schema,
+                inst_id=args.inst_id,
+                chunk_start=chunk_start,
+                chunk_end=chunk_end,
+                mode=args.mode,
                 grid_ms=args.grid_ms,
                 depth=args.depth,
-                price_col="price",
-                size_col="size",
+                    snapshot_max_depth=snapshot_max_depth,
+                raw_snapshot_table="orderbook_snapshots",
+                raw_updates_table="orderbook_updates",
+                snapshot_schema=args.snapshot_schema,
+                snapshot_table=args.snapshot_table,
+                updates_schema=args.updates_schema,
+                updates_table=args.updates_table,
+                time_column=args.time_column,
+                price_column=args.price_column,
+                size_column=args.size_column,
+                segment_diagnostics=args.segment_diagnostics,
+                validate_segments=args.validate_segments,
             )
 
         if df.empty:

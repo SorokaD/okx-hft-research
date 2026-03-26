@@ -11,6 +11,7 @@ from research.reconstruction.reconstructor import (
     load_updates,
     reconstruct_event_states,
     reconstruct_grid_states,
+    reconstruct_chunk_snapshot_to_snapshot,
 )
 
 __all__ = [
@@ -19,4 +20,5 @@ __all__ = [
     "load_updates",
     "reconstruct_event_states",
     "reconstruct_grid_states",
+    "reconstruct_chunk_snapshot_to_snapshot",
 ]

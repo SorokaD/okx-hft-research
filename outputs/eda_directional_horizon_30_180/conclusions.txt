@@ -1,0 +1,50 @@
+Instrument: BTC-USDT-SWAP
+Rows: 2,591,981 from 2026-03-23 00:00:00+00:00 to 2026-03-25 23:59:58+00:00
+tick_size=1.4551915228366852e-11
+Horizons/thresholds with share_reached_plus>5% for ticks>=300:
+ horizon_sec  threshold_ticks  share_reached_plus
+          30              300            0.810409
+          60              300            0.875230
+          90              300            0.902112
+         120              300            0.918904
+         180              300            0.938432
+          30              400            0.810409
+          60              400            0.875230
+          90              400            0.902112
+         120              400            0.918904
+         180              400            0.938432
+          30              500            0.810409
+          60              500            0.875230
+          90              500            0.902112
+         120              500            0.918904
+         180              500            0.938432
+          30              600            0.810409
+          60              600            0.875230
+          90              600            0.902112
+         120              600            0.918904
+         180              600            0.938432
+
+Vol regime counts:
+vol_regime
+high      864034
+low       863984
+medium    863933
+NaN           30
+
+Top features (by |corr|+MI for label A):
+        feature  corr_labelA  mi_labelA  auc_labelA
+ mid_return_30s    -0.256058   0.212091    0.175340
+ mid_return_10s    -0.243344   0.174235    0.205529
+  mid_slope_30s    -0.256586   0.108375    0.175067
+  mid_slope_10s    -0.243594   0.090429    0.205335
+  mid_return_5s    -0.219906   0.130547    0.244140
+   mid_slope_5s    -0.220058   0.072607    0.244022
+rolling_vol_60s     0.128026   0.172286    0.674656
+rolling_vol_30s     0.119436   0.166467    0.657120
+rolling_vol_10s     0.094393   0.129179    0.617499
+  mid_return_1s    -0.130166   0.039712    0.361944
+
+Baseline P(reached_plus_300_by_60s): 0.8752
+Subsample P(TP first for TP300/SL150/60s): 0.4962
+
+Suggested first ML features: mid_return_30s, mid_return_10s, mid_slope_30s, mid_slope_10s, mid_return_5s, mid_slope_5s, rolling_vol_60s, rolling_vol_30s

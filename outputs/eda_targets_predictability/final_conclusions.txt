@@ -1,0 +1,75 @@
+Dataset rows: 2,554,252
+Binary targets: 144 (48 for modeling, favorable_ticks>=260) | Regression targets: 16
+
+Most usable targets:
+                                  target_name  positive_rate_pct
+     short_hit_down_150t_before_up_within_30s          39.593313
+      long_hit_up_150t_before_down_within_30s          39.519358
+short_hit_down_150t_before_up_75t_within_180s          39.244444
+ long_hit_up_150t_before_down_75t_within_180s          39.213515
+short_hit_down_150t_before_up_75t_within_120s          39.116696
+ long_hit_up_150t_before_down_75t_within_120s          39.093089
+ short_hit_down_100t_before_up_50t_within_30s          38.753146
+long_hit_up_200t_before_down_100t_within_180s          38.217764
+  long_hit_up_100t_before_down_50t_within_30s          38.105207
+ short_hit_down_150t_before_up_75t_within_60s          37.992962
+
+Targets that look too rare / too frequent:
+                                  target_name  positive_rate_pct
+  long_hit_up_100t_before_down_50t_within_60s          40.304324
+ long_hit_up_100t_before_down_50t_within_120s          40.684435
+ long_hit_up_100t_before_down_50t_within_180s          40.716499
+ short_hit_down_100t_before_up_50t_within_60s          41.045950
+short_hit_down_100t_before_up_50t_within_120s          41.509060
+short_hit_down_100t_before_up_50t_within_180s          41.535330
+               short_hit_down_260t_within_60s          41.749483
+                  long_hit_up_260t_within_60s          42.360307
+     short_hit_down_200t_before_up_within_60s          42.592117
+      long_hit_up_200t_before_down_within_60s          43.088466
+
+MFE/MAE quantiles sample:
+                                    target_name  median    p90    p95    p99
+   long_max_adverse_excursion_ticks_within_180s   392.0 1307.0 1769.0 3052.5
+    long_max_adverse_excursion_ticks_within_30s   126.0  499.0  669.0 1245.0
+    long_max_adverse_excursion_ticks_within_60s   200.0  721.0  980.0 1785.0
+ long_max_favorable_excursion_ticks_within_180s   414.0 1347.0 1794.0 3076.0
+  long_max_favorable_excursion_ticks_within_30s   125.0  500.0  690.0 1285.0
+  long_max_favorable_excursion_ticks_within_60s   205.0  734.0 1000.0 1806.0
+  short_max_adverse_excursion_ticks_within_180s   414.0 1347.0 1794.0 3076.0
+   short_max_adverse_excursion_ticks_within_30s   125.0  500.0  690.0 1285.0
+   short_max_adverse_excursion_ticks_within_60s   205.0  734.0 1000.0 1806.0
+short_max_favorable_excursion_ticks_within_180s   392.0 1307.0 1769.0 3052.5
+ short_max_favorable_excursion_ticks_within_30s   126.0  499.0  669.0 1245.0
+ short_max_favorable_excursion_ticks_within_60s   200.0  721.0  980.0 1785.0
+
+Best baseline modeling results:
+                                       target    model  roc_auc   pr_auc  positive_rate
+               short_hit_down_300t_within_60s   logreg 0.670696 0.470537       0.309536
+                  long_hit_up_300t_within_60s   logreg 0.649032 0.458673       0.308098
+     short_hit_down_300t_before_up_within_60s   logreg 0.633470 0.399793       0.290150
+               short_hit_down_300t_within_60s catboost 0.629207 0.404986       0.309536
+     short_hit_down_260t_before_up_within_60s   logreg 0.612988 0.425448       0.329687
+      long_hit_up_300t_before_down_within_60s   logreg 0.611231 0.395553       0.289276
+short_hit_down_300t_before_up_150t_within_60s   logreg 0.600183 0.329459       0.253351
+     short_hit_down_300t_before_up_within_60s catboost 0.599432 0.338819       0.290150
+      long_hit_up_260t_before_down_within_60s   logreg 0.597377 0.423017       0.329594
+ long_hit_up_300t_before_down_150t_within_60s   logreg 0.591920 0.325611       0.249716
+
+Targets with ROC AUC > 0.60: ['short_hit_down_300t_within_60s', 'long_hit_up_300t_within_60s', 'short_hit_down_300t_before_up_within_60s', 'short_hit_down_300t_within_60s', 'short_hit_down_260t_before_up_within_60s', 'long_hit_up_300t_before_down_within_60s', 'short_hit_down_300t_before_up_150t_within_60s']
+
+Feature families in top importance:
+feature_family  count
+         other    124
+     imbalance    118
+    volatility     72
+    order_flow     27
+        spread     19
+
+Stability over time (best model per segment):
+                                        target time_segment  model  roc_auc   pr_auc
+ long_hit_up_260t_before_down_120t_within_180s  first_third logreg 0.582618 0.393641
+ long_hit_up_260t_before_down_120t_within_180s middle_third logreg 0.549665 0.414677
+ long_hit_up_260t_before_down_120t_within_180s   last_third logreg 0.575163 0.431400
+short_hit_down_260t_before_up_120t_within_180s  first_third logreg 0.573031 0.422830
+short_hit_down_260t_before_up_120t_within_180s middle_third logreg 0.565751 0.388806
+short_hit_down_260t_before_up_120t_within_180s   last_third logreg 0.578490 0.417723
